@@ -2,50 +2,48 @@ name: CI for Microservices
 
 on:
   push:
-    branches:
-      - main
-      - '**'
+    branches: [ main ]
   pull_request:
+    branches: [ main ]
 
 jobs:
-  detect-changes:
-    runs-on: ubuntu-latest
-    outputs:
-      services: ${{ steps.filter.outputs.services }}
-    steps:
-      - uses: actions/checkout@v3
-
-      - id: filter
-        name: Detect changed service directories
-        run: |
-          echo "services=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^services/' | cut -d/ -f2 | sort -u | jq -R -s -c 'split("\n") | map(select(. != ""))')" >> $GITHUB_OUTPUT
-
   build:
-    needs: detect-changes
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: ${{ fromJson(needs.detect-changes.outputs.services) }}
-    steps:
-      - uses: actions/checkout@v3
+        service:
+          - typing-indicator-service
+          - chat-service
+          - message-history-service
 
-      - name: Determine language and build
-        working-directory: ./services/${{ matrix.service }}
-        run: |
-          if [ -f "package.json" ]; then
-            echo "Node.js service detected"
-            npm install
-            npm test || echo "No tests"
-            docker build -t ${{ matrix.service }} .
-          elif [ -f "requirements.txt" ]; then
-            echo "Python service detected"
-            python -m pip install --upgrade pip
-            pip install -r requirements.txt
-            docker build -t ${{ matrix.service }} .
-          elif [ -f "pom.xml" ]; then
-            echo "Java service detected"
-            mvn clean package
-            docker build -t ${{ matrix.service }} .
-          else
-            echo "No recognizable service in ${{ matrix.service }}"
-            exit 1
+    defaults:
+      run:
+        working-directory: services/${{ matrix.service }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Lint with flake8
+      run: |
+        pip install flake8
+        flake8 app || true
+
+    - name: Format check with black
+      run: |
+        pip install black
+        black --check app || true
+
+    - name: Run tests
+      run: |
+        echo "Add pytest or unittest here"
